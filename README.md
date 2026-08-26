@@ -16,7 +16,8 @@ The system provides an end-to-end pipeline to slice high-resolution source image
 7. [Visual Inspector GUI](#visual-inspector-gui)
 8. [Automated Testing](#automated-testing)
 9. [Output Structure](#output-structure)
-10. [License and References](#license-and-references)
+10. [Special Thanks](#special-thanks)
+11. [License and References](#license-and-references)
 
 ---
 
@@ -248,6 +249,12 @@ python -m unittest discover tests -v
 - `output/tiles/<group>/<image_id>/tiles/`: Extracted PNG tiles named `tile_RR_CC.png`.
 - `output/tiles/<group>/<image_id>/metadata.json`: Grid metadata containing source path, dimensions, and tile lists.
 - `output/solved/<group>/<image_id>.png`: Solved and stitched composite images.
+
+---
+
+## Special Thanks
+
+Special thanks to my teammate [@mahsn12](https://github.com/mahsn12) for their valuable collaboration and contributions to this project!
 
 ---
 
