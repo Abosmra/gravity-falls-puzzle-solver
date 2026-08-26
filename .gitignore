@@ -1,44 +1,102 @@
-# Python bytecode & caches
+# ==============================================================================
+# Python Bytecode, Caches & Intermediate Files
+# ==============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 *.pyo
+*.pyd
+.Python
+*.manifest
+*.spec
 
-# Virtual Environments
+# ==============================================================================
+# Virtual Environments & Environment Variables
+# ==============================================================================
 .venv/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 .env
-.env.local
+.env.*
+!.env.example
 
-# Packaging & Builds
+# ==============================================================================
+# Packaging, Distribution & Builds
+# ==============================================================================
 build/
 dist/
 *.egg-info/
 .eggs/
+*.egg
+develop-eggs/
+downloads/
+eggs/
+parts/
+var/
+wheels/
+share/python-wheels/
+installed.cfg
 
-# Testing & Coverage
+# ==============================================================================
+# Testing, Coverage & Profiling
+# ==============================================================================
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.tox/
+.nox/
+.hypothesis/
+nosetests.xml
+coverage.xml
+*.cover
+*.profile
 
-# Logs & OS metadata
-*.log
-.DS_Store
-Thumbs.db
+# ==============================================================================
+# IDEs, Editors & OS Metadata
+# ==============================================================================
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
 
-# Datasets and Generated Outputs
+# ==============================================================================
+# Datasets, Output Directories & Generated Artifacts
+# ==============================================================================
 dataset_images/
 dataset/
 data/
 output/
+outputs/
+reports/
 phase1_outputs/
 phase2_outputs/
+
+# Archive files
 *.zip
+*.tar
 *.tar.gz
+*.tgz
 *.rar
 *.7z
+
+# Logs & Temporary Files
+*.log
+scratch/
+tmp/
+temp/
