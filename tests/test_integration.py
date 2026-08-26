@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from puzzle_solver.core.tiling import preprocess_image
-from puzzle_solver.core.features import load_tiles_from_phase1
+from puzzle_solver.core.features import load_tiles
 from puzzle_solver.core.solver import PuzzleSolver
 from puzzle_solver.core.assembly import assemble_puzzle
 from puzzle_solver.pipeline import solve_image
@@ -17,8 +17,8 @@ class TestIntegrationPipeline(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_p = Path(tmp_dir)
             source_img_path = tmp_p / "input_test.png"
-            phase1_out = tmp_p / "phase1_out"
-            phase2_out = tmp_p / "phase2_out"
+            tiles_out = tmp_p / "tiles_out"
+            solved_out = tmp_p / "solved_out"
 
             img = np.zeros((64, 64, 3), dtype=np.uint8)
             for r in range(64):
@@ -26,17 +26,18 @@ class TestIntegrationPipeline(unittest.TestCase):
                     img[r, c] = [r * 4, c * 4, (r + c) * 2]
             cv2.imwrite(str(source_img_path), img)
 
-            p1_dest = phase1_out / "puzzle_2x2" / "sample"
-            preprocess_image(source_img_path, p1_dest, rows=2, cols=2)
+            # Slice into 2x2
+            tile_dest = tiles_out / "puzzle_2x2" / "sample"
+            preprocess_image(source_img_path, tile_dest, rows=2, cols=2)
 
-            tiles = load_tiles_from_phase1(phase1_out, "puzzle_2x2", "sample")
+            tiles = load_tiles(tile_dest)
             self.assertEqual(len(tiles), 4)
 
             solver = PuzzleSolver(tiles, rows=2, cols=2)
             result = solver.solve(time_limit=10.0)
             self.assertIsNotNone(result)
 
-            assembled_path = phase2_out / "puzzle_2x2" / "sample.png"
+            assembled_path = solved_out / "puzzle_2x2" / "sample.png"
             canvas = assemble_puzzle(tiles, result["placement_map"], 2, 2, output_path=assembled_path)
 
             self.assertTrue(assembled_path.exists())

@@ -8,21 +8,6 @@ import numpy as np
 
 
 def extract_borders(piece: np.ndarray, strip_width: int = 1) -> Dict[int, np.ndarray]:
-    """Extract border feature strips from each side (0:Top, 1:Right, 2:Bottom, 3:Left).
-
-    Constructs a 6-channel feature tensor per border containing:
-    - 3 Channels LAB Color Representation
-    - 1 Channel Gradient Magnitude (Sobel)
-    - 1 Channel Gradient Direction/Phase (Sobel)
-    - 1 Channel Edge Roughness/Curvature (Laplacian)
-
-    Args:
-        piece: Tile image array (BGR format).
-        strip_width: Boundary strip width in pixels.
-
-    Returns:
-        Dictionary mapping side indices [0, 1, 2, 3] to their respective feature arrays.
-    """
     lab = cv2.cvtColor(piece, cv2.COLOR_BGR2LAB).astype(np.float32)
     h, w = lab.shape[:2]
     sw = max(1, min(strip_width, h // 2, w // 2))
@@ -47,7 +32,6 @@ def extract_borders(piece: np.ndarray, strip_width: int = 1) -> Dict[int, np.nda
 
 
 def normalize_strip_2d(strip: np.ndarray) -> np.ndarray:
-    """Normalize each channel of a border feature strip to zero mean and unit variance."""
     arr = strip.astype(np.float32).copy()
     for ch in range(arr.shape[2]):
         m, sd = arr[..., ch].mean(), arr[..., ch].std()
@@ -67,23 +51,6 @@ def border_distance_2d(
     w_grad_dir: float = 0.2,
     w_lap: float = 0.4,
 ) -> float:
-    """Calculate the non-linear distance between two opposing border feature strips.
-
-    Args:
-        strip_a: Feature strip of piece A.
-        strip_b: Feature strip of piece B.
-        side_a: Border orientation index for piece A.
-        side_b: Border orientation index for piece B.
-        p: Non-linear Minkowski exponent for channel differences.
-        q: Outer compression exponent.
-        w_color: Weight for LAB color difference.
-        w_grad_mag: Weight for gradient magnitude difference.
-        w_grad_dir: Weight for gradient phase difference.
-        w_lap: Weight for Laplacian second-derivative difference.
-
-    Returns:
-        Scalar compatibility distance (lower values denote higher compatibility).
-    """
     def orient(strip: np.ndarray, side: int) -> np.ndarray:
         return normalize_strip_2d(np.transpose(strip, (1, 0, 2)) if side in (1, 3) else strip)
 
@@ -104,11 +71,6 @@ def border_distance_2d(
 
 
 def build_compatibility(pieces: List[np.ndarray], strip_width: int = 1) -> Dict[int, np.ndarray]:
-    """Compute pairwise border distance matrices across all spatial orientations.
-
-    Returns a dictionary mapping side index [0: Top, 1: Right, 2: Bottom, 3: Left]
-    to an (N x N) compatibility distance matrix.
-    """
     n = len(pieces)
     borders = [extract_borders(p, strip_width) for p in pieces]
     compat = {s: np.full((n, n), 1e9, dtype=np.float32) for s in range(4)}
@@ -125,27 +87,17 @@ def build_compatibility(pieces: List[np.ndarray], strip_width: int = 1) -> Dict[
     return compat
 
 
-def load_tiles_from_phase1(source_root: Union[str, Path], category: str, identifier: str) -> List[Dict[str, Any]]:
-    """Load enhanced tile images from Phase 1 directory for a given puzzle image.
+def load_tiles(source_dir: Union[str, Path]) -> List[Dict[str, Any]]:
+    source_dir = Path(source_dir)
+    tiles_dir = source_dir / 'tiles' if (source_dir / 'tiles').is_dir() else source_dir
+    if not tiles_dir.is_dir():
+        raise FileNotFoundError(f'Tiles directory not found: {tiles_dir}')
 
-    Args:
-        source_root: Base path to Phase 1 outputs.
-        category: Puzzle category directory (e.g. 'puzzle_4x4').
-        identifier: Puzzle image ID (e.g. '0').
-
-    Returns:
-        List of dictionaries containing tile id, img (np.ndarray), and path.
-    """
-    source_root = Path(source_root)
-    resource_dir = source_root / category / identifier / "tiles"
-    if not resource_dir.is_dir():
-        raise FileNotFoundError(f"Tiles directory not found: {resource_dir}")
-
-    metadata_path = source_root / category / identifier / "metadata.json"
+    metadata_path = source_dir / 'metadata.json'
     meta: Dict[str, Any] = {}
     if metadata_path.exists():
         try:
-            with open(metadata_path, "r", encoding="utf-8") as fh:
+            with open(metadata_path, 'r', encoding='utf-8') as fh:
                 meta = json.load(fh)
         except Exception:
             meta = {}
@@ -157,16 +109,16 @@ def load_tiles_from_phase1(source_root: Union[str, Path], category: str, identif
         if img.ndim == 2:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         base = Path(img_path).stem
-        return {"id": base, "img": img, "path": str(img_path)}
+        return {'id': base, 'img': img, 'path': str(img_path)}
 
-    if isinstance(meta, dict) and "tile_filenames" in meta:
+    if isinstance(meta, dict) and 'tile_filenames' in meta:
         ordered = []
-        for fn in meta["tile_filenames"]:
-            if not isinstance(fn, str) or not fn.lower().endswith(".png"):
+        for fn in meta['tile_filenames']:
+            if not isinstance(fn, str) or not fn.lower().endswith('.png'):
                 continue
-            if any(tag in fn for tag in ["_mask", "_contours", "_inv"]):
+            if any(tag in fn for tag in ['_mask', '_contours', '_inv']):
                 continue
-            candidate = resource_dir / fn
+            candidate = tiles_dir / fn
             if candidate.exists():
                 item = _load_one(candidate)
                 if item is not None:
@@ -174,8 +126,8 @@ def load_tiles_from_phase1(source_root: Union[str, Path], category: str, identif
         if len(ordered) > 0:
             return ordered
 
-    all_pngs = sorted([f for f in os.listdir(resource_dir) if f.lower().endswith(".png")])
-    numeric_pattern = re.compile(r"tile_(\d+)_(\d+)\.png$", flags=re.IGNORECASE)
+    all_pngs = sorted([f for f in os.listdir(tiles_dir) if f.lower().endswith('.png')])
+    numeric_pattern = re.compile(r'tile_(\d+)_(\d+)\.png$', flags=re.IGNORECASE)
 
     tiles = []
     for fn in all_pngs:
@@ -188,11 +140,15 @@ def load_tiles_from_phase1(source_root: Union[str, Path], category: str, identif
         tiles.sort(key=lambda x: (x[0], x[1]))
         loaded = []
         for r, c, fn in tiles:
-            candidate = resource_dir / fn
+            candidate = tiles_dir / fn
             item = _load_one(candidate)
             if item is not None:
                 loaded.append(item)
         if loaded:
             return loaded
 
-    raise RuntimeError(f"No tiles found in {resource_dir}")
+    raise RuntimeError(f'No tiles found in {tiles_dir}')
+
+
+def load_tiles_from_phase1(source_root: Union[str, Path], category: str, identifier: str) -> List[Dict[str, Any]]:
+    return load_tiles(Path(source_root) / category / identifier)

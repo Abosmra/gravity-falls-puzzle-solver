@@ -1,7 +1,7 @@
 # Python bytecode & caches
 __pycache__/
 *.py[cod]
-*.class
+*$py.class
 *.so
 *.pyo
 
@@ -35,6 +35,7 @@ Thumbs.db
 dataset_images/
 dataset/
 data/
+output/
 phase1_outputs/
 phase2_outputs/
 *.zip

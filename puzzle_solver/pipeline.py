@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from puzzle_solver.core.tiling import detect_grid_from_folder, preprocess_image, smart_enhance
-from puzzle_solver.core.features import load_tiles_from_phase1
+from puzzle_solver.core.features import load_tiles
 from puzzle_solver.core.solver import PuzzleSolver
 from puzzle_solver.core.assembly import assemble_puzzle
 
@@ -21,18 +21,7 @@ def solve_image(
     output_path: Optional[Union[str, Path]] = None,
     time_limit: float = 60.0
 ) -> Tuple[np.ndarray, Dict[str, Any]]:
-    """End-to-end unified solver: slices an image into tiles, solves the puzzle, and reassembles it.
-
-    Args:
-        image_path: Path to the input image file.
-        rows: Number of grid rows.
-        cols: Number of grid columns.
-        output_path: Optional path to save the assembled solved image.
-        time_limit: Maximum solver time in seconds.
-
-    Returns:
-        Tuple of (assembled BGR image ndarray, solver result dict).
-    """
+    """End-to-end unified solver: slices an image into tiles, solves the puzzle, and reassembles it."""
     image_path = Path(image_path)
     img = cv2.imread(str(image_path))
     if img is None:
@@ -56,7 +45,6 @@ def solve_image(
         y_offsets.append(y_offsets[-1] + h_r)
 
     tiles = []
-    idx = 0
     for r in range(rows):
         for c in range(cols):
             x1, y1 = x_offsets[c], y_offsets[r]
@@ -65,7 +53,6 @@ def solve_image(
             avg_size = (w_t + h_t) // 2
             tile_enh = smart_enhance(tile_raw, tile_size=avg_size)
             tiles.append({"id": f"tile_{r:02d}_{c:02d}", "img": tile_enh, "path": ""})
-            idx += 1
 
     solver = PuzzleSolver(tiles, rows, cols)
     result = solver.solve(time_limit=time_limit)
@@ -77,7 +64,6 @@ def solve_image(
 
 
 def iter_groups(root_path: Union[str, Path], specific: Optional[str] = None) -> Generator[str, None, None]:
-    """Iterate over puzzle groups (e.g. puzzle_2x2, puzzle_4x4, puzzle_8x8)."""
     root_p = Path(root_path)
     if specific:
         yield specific
@@ -95,22 +81,21 @@ def iter_images(
     group_name: str,
     specific: Optional[str] = None
 ) -> Generator[str, None, None]:
-    """Iterate over available puzzle image IDs in a group folder."""
     root_p = Path(root_path)
     group_path = root_p / group_name
     if specific:
-        if (group_path / specific / "tiles").is_dir():
+        if (group_path / specific).is_dir():
             yield specific
         return
 
     if group_path.is_dir():
         for item in sorted(os.listdir(group_path), key=lambda x: int(x) if x.isdigit() else x):
             item_path = group_path / item
-            if item_path.is_dir() and (item_path / "tiles").is_dir():
+            if item_path.is_dir():
                 yield item
 
 
-def _process_one_phase1_worker(image_path: Path, input_dataset_path: Path, output_base_path: Path):
+def _extract_worker(image_path: Path, input_dataset_path: Path, output_base_path: Path):
     folder_name = image_path.parent.name
     grid_rows, grid_cols = detect_grid_from_folder(folder_name)
     if grid_rows is None:
@@ -131,15 +116,15 @@ def _process_one_phase1_worker(image_path: Path, input_dataset_path: Path, outpu
     return ("done", image_path, output_path, detected_tile_count, saved_tile_count)
 
 
-def run_phase1_pipeline(
+def extract_tiles(
     input_dataset_path: Union[str, Path] = "dataset_images",
-    output_base_path: Union[str, Path] = "phase1_outputs",
+    output_tiles_path: Union[str, Path] = "output/tiles",
     max_workers: Optional[int] = None
 ) -> Dict[str, int]:
     """Extract and enhance puzzle tiles from raw dataset images."""
     input_dataset_path = Path(input_dataset_path)
-    output_base_path = Path(output_base_path)
-    output_base_path.mkdir(parents=True, exist_ok=True)
+    output_tiles_path = Path(output_tiles_path)
+    output_tiles_path.mkdir(parents=True, exist_ok=True)
 
     image_file_list = [
         fp for fp in input_dataset_path.rglob("*")
@@ -158,7 +143,7 @@ def run_phase1_pipeline(
 
     with ProcessPoolExecutor(max_workers=workers) as ex:
         futures = {
-            ex.submit(_process_one_phase1_worker, img_p, input_dataset_path, output_base_path): img_p
+            ex.submit(_extract_worker, img_p, input_dataset_path, output_tiles_path): img_p
             for img_p in image_file_list
         }
 
@@ -182,8 +167,8 @@ def run_phase1_pipeline(
     return {"total": len(image_file_list), "processed": processed, "skipped": skipped, "failed": failed}
 
 
-def _process_one_phase2_worker(
-    phase1_root: Union[str, Path],
+def _reassemble_worker(
+    tiles_root: Union[str, Path],
     group: str,
     image: str,
     out_root: Union[str, Path],
@@ -195,7 +180,7 @@ def _process_one_phase2_worker(
             print(f"[{group}/{image}] SKIP - Cannot infer grid size")
             return False
 
-        tiles = load_tiles_from_phase1(phase1_root, group, image)
+        tiles = load_tiles(Path(tiles_root) / group / image)
         solver = PuzzleSolver(tiles, rows, cols)
         result = solver.solve(time_limit=time_limit)
 
@@ -220,9 +205,9 @@ def _process_one_phase2_worker(
         return False
 
 
-def run_phase2_pipeline(
-    phase1_root: Union[str, Path] = "phase1_outputs",
-    out_root: Union[str, Path] = "phase2_outputs",
+def reassemble_puzzles(
+    tiles_root: Union[str, Path] = "output/tiles",
+    out_root: Union[str, Path] = "output/solved",
     group: Optional[str] = None,
     image: Optional[str] = None,
     time_limit: float = 60.0,
@@ -230,23 +215,27 @@ def run_phase2_pipeline(
     max_workers: Optional[int] = None
 ) -> Dict[str, int]:
     """Reassemble puzzles using Best-Buddies solver."""
-    phase1_root = Path(phase1_root)
+    tiles_root = Path(tiles_root)
+    # Check fallback legacy path if output/tiles is empty
+    if not tiles_root.exists() and Path("phase1_outputs").exists():
+        tiles_root = Path("phase1_outputs")
+
     out_root = Path(out_root)
     dataset_root = Path(dataset_root)
 
     tasks = [
         (grp, img)
-        for grp in iter_groups(phase1_root, group)
-        for img in iter_images(phase1_root, grp, image)
+        for grp in iter_groups(tiles_root, group)
+        for img in iter_images(tiles_root, grp, image)
     ]
 
     if not tasks:
-        print("[INFO] Tile outputs not found for requested puzzles; extracting tiles now...")
-        run_phase1_pipeline(dataset_root, phase1_root, max_workers=max_workers)
+        print("[INFO] Tile outputs not found; extracting tiles now...")
+        extract_tiles(dataset_root, tiles_root, max_workers=max_workers)
         tasks = [
             (grp, img)
-            for grp in iter_groups(phase1_root, group)
-            for img in iter_images(phase1_root, grp, image)
+            for grp in iter_groups(tiles_root, group)
+            for img in iter_images(tiles_root, grp, image)
         ]
 
     if not tasks:
@@ -263,7 +252,7 @@ def run_phase2_pipeline(
 
     with ProcessPoolExecutor(max_workers=workers) as ex:
         futures = {
-            ex.submit(_process_one_phase2_worker, phase1_root, grp, img, out_root, time_limit): (grp, img)
+            ex.submit(_reassemble_worker, tiles_root, grp, img, out_root, time_limit): (grp, img)
             for (grp, img) in tasks
         }
 
@@ -289,3 +278,23 @@ def run_phase2_pipeline(
     print(f"{'=' * 70}\n")
 
     return {"total": successes + failures, "successes": successes, "failures": failures}
+
+
+def solve_dataset(
+    dataset_path: Union[str, Path] = "dataset_images",
+    output_dir: Union[str, Path] = "output",
+    time_limit: float = 60.0,
+    max_workers: Optional[int] = None
+) -> Dict[str, Any]:
+    """Unified pipeline runner: extracts tiles and reassembles all dataset puzzles."""
+    output_p = Path(output_dir)
+    tiles_p = output_p / "tiles"
+    solved_p = output_p / "solved"
+
+    print(f"[INFO] Step 1: Extracting tiles to {tiles_p}")
+    extract_res = extract_tiles(dataset_path, tiles_p, max_workers=max_workers)
+
+    print(f"[INFO] Step 2: Reassembling puzzles to {solved_p}")
+    solve_res = reassemble_puzzles(tiles_p, solved_p, time_limit=time_limit, dataset_root=dataset_path, max_workers=max_workers)
+
+    return {"extraction": extract_res, "reassembly": solve_res}

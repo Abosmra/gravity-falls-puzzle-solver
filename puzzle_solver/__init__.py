@@ -5,6 +5,7 @@ from .core.features import (
     normalize_strip_2d,
     border_distance_2d,
     build_compatibility,
+    load_tiles,
     load_tiles_from_phase1,
 )
 from .core.solver import (
@@ -17,7 +18,7 @@ from .core.solver import (
     solve_bruteforce,
 )
 from .core.assembly import assemble_puzzle
-from .pipeline import run_phase1_pipeline, run_phase2_pipeline, solve_image
+from .pipeline import solve_image, solve_dataset, extract_tiles, reassemble_puzzles
 
 __version__ = "1.0.0"
 
@@ -33,6 +34,7 @@ __all__ = [
     "normalize_strip_2d",
     "border_distance_2d",
     "build_compatibility",
+    "load_tiles",
     "load_tiles_from_phase1",
     "PuzzleSolver",
     "opposite_side",
@@ -42,7 +44,8 @@ __all__ = [
     "shift_placement",
     "solve_bruteforce",
     "assemble_puzzle",
-    "run_phase1_pipeline",
-    "run_phase2_pipeline",
     "solve_image",
+    "solve_dataset",
+    "extract_tiles",
+    "reassemble_puzzles",
 ]

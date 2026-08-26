@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 
-from puzzle_solver.core.features import load_tiles_from_phase1
+from puzzle_solver.core.features import load_tiles
 from puzzle_solver.core.solver import PuzzleSolver
 from puzzle_solver.core.assembly import assemble_puzzle
 
@@ -17,13 +17,19 @@ from puzzle_solver.core.assembly import assemble_puzzle
 class PuzzleViewerGUI:
     """Tkinter-based interactive visualizer for before/after puzzle state inspection."""
 
-    def __init__(self, root: tk.Tk, phase1_root: str = "phase1_outputs", out_dir: str = "phase2_outputs"):
+    def __init__(self, root: tk.Tk, tiles_dir: str = "output/tiles", solved_dir: str = "output/solved"):
         self.root = root
         self.root.title("Gravity Falls Puzzle Solver - Visual Inspector")
         self.root.geometry("1400x900")
 
-        self.phase1_root = phase1_root
-        self.out_dir = out_dir
+        # Fallback to legacy path if output/tiles does not exist yet
+        if not Path(tiles_dir).exists() and Path("phase1_outputs").exists():
+            tiles_dir = "phase1_outputs"
+        if not Path(solved_dir).exists() and Path("phase2_outputs").exists():
+            solved_dir = "phase2_outputs"
+
+        self.tiles_dir = tiles_dir
+        self.solved_dir = solved_dir
         self.groups_order = ["puzzle_2x2", "puzzle_4x4", "puzzle_8x8"]
 
         self.puzzles: List[Tuple[str, str]] = []
@@ -37,7 +43,6 @@ class PuzzleViewerGUI:
         self.scan_puzzles()
 
     def setup_ui(self) -> None:
-        """Construct GUI frames, canvases, buttons, and status labels."""
         control_frame = ttk.Frame(self.root)
         control_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
@@ -70,13 +75,13 @@ class PuzzleViewerGUI:
         content_frame = ttk.Frame(self.root)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        left_frame = ttk.LabelFrame(content_frame, text="Before: Original Tiles / Scrambled", padding=10)
+        left_frame = ttk.LabelFrame(content_frame, text="Original Image / Tiles", padding=10)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
 
         self.canvas_before = tk.Canvas(left_frame, bg="gray20", width=500, height=500)
         self.canvas_before.pack(fill=tk.BOTH, expand=True)
 
-        right_frame = ttk.LabelFrame(content_frame, text="After: Solved Reconstruction", padding=10)
+        right_frame = ttk.LabelFrame(content_frame, text="Solved Reconstruction", padding=10)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
 
         self.canvas_after = tk.Canvas(right_frame, bg="gray20", width=500, height=500)
@@ -96,25 +101,23 @@ class PuzzleViewerGUI:
         ttk.Button(nav_frame, text="Resolve (Redo)", command=self.resolve_current).pack(side=tk.LEFT, padx=5)
 
     def scan_puzzles(self) -> None:
-        """Scan directory structure and populate puzzle list ordered by image ID and grid size."""
         self.puzzles = []
 
-        if not os.path.isdir(self.phase1_root):
-            self.update_status(f"Phase 1 outputs not found: {self.phase1_root}")
+        if not os.path.isdir(self.tiles_dir):
+            self.update_status(f"Tiles directory not found: {self.tiles_dir}")
             return
 
         images_by_group: Dict[str, List[str]] = {}
 
-        for group_dir in sorted(os.listdir(self.phase1_root)):
-            group_path = os.path.join(self.phase1_root, group_dir)
+        for group_dir in sorted(os.listdir(self.tiles_dir)):
+            group_path = os.path.join(self.tiles_dir, group_dir)
             if not os.path.isdir(group_path):
                 continue
 
             images_by_group[group_dir] = []
             for item in sorted(os.listdir(group_path), key=lambda x: int(x) if x.isdigit() else x):
                 item_path = os.path.join(group_path, item)
-                tiles_dir = os.path.join(item_path, "tiles")
-                if os.path.isdir(tiles_dir):
+                if os.path.isdir(item_path):
                     images_by_group[group_dir].append(item)
 
         max_image_id = 0
@@ -136,7 +139,6 @@ class PuzzleViewerGUI:
             self.update_status("No puzzles found")
 
     def display_puzzle(self) -> None:
-        """Render both before and after views of the active puzzle."""
         if not self.puzzles or self.current_idx >= len(self.puzzles):
             return
 
@@ -146,7 +148,7 @@ class PuzzleViewerGUI:
 
         try:
             try:
-                self.current_tiles = load_tiles_from_phase1(self.phase1_root, group, image_id)
+                self.current_tiles = load_tiles(Path(self.tiles_dir) / group / image_id)
                 self.show_before_image()
             except Exception:
                 self.show_loading_image(self.canvas_before, "Loading tiles...")
@@ -162,7 +164,6 @@ class PuzzleViewerGUI:
             self.canvas_after.delete("all")
 
     def show_before_image(self) -> None:
-        """Render input source image from dataset."""
         group, image_id = self.puzzles[self.current_idx]
         dataset_folder = group if group in ["puzzle_2x2", "puzzle_4x4", "puzzle_8x8"] else "puzzle_2x2"
         original_path = os.path.join("dataset_images", dataset_folder, f"{image_id}.jpg")
@@ -179,8 +180,7 @@ class PuzzleViewerGUI:
         self.show_loading_image(self.canvas_before, "Loading original image...")
 
     def show_after_image(self, group: str, image_id: str) -> None:
-        """Render solved puzzle image from output directory."""
-        solved_path = os.path.join(self.out_dir, group, f"{image_id}.png")
+        solved_path = os.path.join(self.solved_dir, group, f"{image_id}.png")
 
         if os.path.exists(solved_path):
             img = cv2.imread(solved_path)
@@ -193,7 +193,6 @@ class PuzzleViewerGUI:
         self.current_result = None
 
     def show_loading_image(self, canvas: tk.Canvas, text: str) -> None:
-        """Display placeholder notification text on canvas."""
         canvas.delete("all")
         w = max(600, canvas.winfo_width())
         h = max(600, canvas.winfo_height())
@@ -204,7 +203,6 @@ class PuzzleViewerGUI:
         self.show_image_on_canvas(canvas, blank)
 
     def show_image_on_canvas(self, canvas: tk.Canvas, cv_image: np.ndarray) -> None:
-        """Scale and draw an OpenCV BGR image onto a Tkinter Canvas."""
         canvas_w = max(600, canvas.winfo_width())
         canvas_h = max(600, canvas.winfo_height())
 
@@ -221,10 +219,9 @@ class PuzzleViewerGUI:
 
         canvas.delete("all")
         canvas.create_image(canvas_w // 2, canvas_h // 2, image=photo)
-        canvas.image = photo  # Keep reference
+        canvas.image = photo
 
     def update_info(self, group: str, image_id: str) -> None:
-        """Update the metadata text widget."""
         self.info_text.delete(1.0, tk.END)
 
         if "2x2" in group:
@@ -248,7 +245,7 @@ class PuzzleViewerGUI:
         if self.current_result is not None:
             info += "Status: SOLVED\n"
         else:
-            solved_path = os.path.join(self.out_dir, group, f"{image_id}.png")
+            solved_path = os.path.join(self.solved_dir, group, f"{image_id}.png")
             if os.path.exists(solved_path):
                 info += "Status: SOLVED\n"
             else:
@@ -257,17 +254,14 @@ class PuzzleViewerGUI:
         self.info_text.insert(tk.END, info)
 
     def update_counter(self) -> None:
-        """Update numeric index display."""
         if self.puzzles:
             self.counter_label.config(text=f"{self.current_idx + 1}/{len(self.puzzles)}")
 
     def update_status(self, message: str) -> None:
-        """Set status bar string."""
         self.status_label.config(text=message)
         self.root.update_idletasks()
 
     def solve_current(self) -> None:
-        """Trigger background solver for current puzzle."""
         if self.solving:
             self.update_status("Already solving...")
             return
@@ -280,7 +274,6 @@ class PuzzleViewerGUI:
         thread.start()
 
     def goto_puzzle(self) -> None:
-        """Jump directly to a selected group and image ID."""
         target_group = self.grid_var.get()
         target_image = self.image_var.get().strip()
         if not target_image:
@@ -293,7 +286,6 @@ class PuzzleViewerGUI:
         self.update_status(f"Not found: {target_group}/{target_image}")
 
     def _solve_worker(self) -> None:
-        """Background solving routine."""
         try:
             self.solving = True
             group, image_id = self.puzzles[self.current_idx]
@@ -316,7 +308,7 @@ class PuzzleViewerGUI:
                 return
 
             placement = result["placement_map"]
-            out_path = Path(self.out_dir) / group / f"{image_id}.png"
+            out_path = Path(self.solved_dir) / group / f"{image_id}.png"
             canvas = assemble_puzzle(self.current_tiles, placement, grid_n, grid_n, output_path=out_path)
 
             self.current_result = canvas
@@ -333,11 +325,10 @@ class PuzzleViewerGUI:
             self.solving = False
 
     def resolve_current(self) -> None:
-        """Delete existing output and re-solve."""
         if not self.puzzles or self.solving:
             return
         group, image_id = self.puzzles[self.current_idx]
-        solved_path = Path(self.out_dir) / group / f"{image_id}.png"
+        solved_path = Path(self.solved_dir) / group / f"{image_id}.png"
         if solved_path.exists():
             try:
                 solved_path.unlink()
@@ -349,22 +340,19 @@ class PuzzleViewerGUI:
         self.solve_current()
 
     def next_puzzle(self) -> None:
-        """Advance to next puzzle."""
         if self.puzzles:
             self.current_idx = (self.current_idx + 1) % len(self.puzzles)
             self.display_puzzle()
 
     def previous_puzzle(self) -> None:
-        """Step back to previous puzzle."""
         if self.puzzles:
             self.current_idx = (self.current_idx - 1) % len(self.puzzles)
             self.display_puzzle()
 
 
-def launch_gui(phase1_root: str = "phase1_outputs", out_dir: str = "phase2_outputs") -> None:
-    """Instantiate and execute the visual inspector Tkinter event loop."""
+def launch_gui(tiles_dir: str = "output/tiles", solved_dir: str = "output/solved") -> None:
     root = tk.Tk()
-    app = PuzzleViewerGUI(root, phase1_root=phase1_root, out_dir=out_dir)
+    app = PuzzleViewerGUI(root, tiles_dir=tiles_dir, solved_dir=solved_dir)
     root.mainloop()
 
 

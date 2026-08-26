@@ -2,7 +2,7 @@
 
 An autonomous Computer Vision system for square jigsaw and tiled image puzzle reassembly using multi-cue border feature matching and the Best-Buddies placement algorithm.
 
-The system slices high-resolution source images into uniform grid tiles (2x2, 4x4, 8x8), applies edge-preserving enhancement, extracts multi-channel boundary features, computes compatibility metrics, reconstructs the original image layout, and provides an interactive visual inspector GUI.
+The system provides an end-to-end pipeline to slice high-resolution source images into uniform grid tiles (2x2, 4x4, 8x8), apply edge-preserving enhancement, extract multi-channel boundary features, compute compatibility metrics, reconstruct the original image layout, and provide an interactive visual inspector GUI.
 
 ---
 
@@ -15,26 +15,26 @@ The system slices high-resolution source images into uniform grid tiles (2x2, 4x
 6. [CLI and Execution Guide](#cli-and-execution-guide)
 7. [Visual Inspector GUI](#visual-inspector-gui)
 8. [Automated Testing](#automated-testing)
-9. [Output Artifacts](#output-artifacts)
+9. [Output Structure](#output-structure)
 10. [License and References](#license-and-references)
 
 ---
 
 ## Key Capabilities
 
-- Automated Grid Tiling: Slices arbitrary images into exact regular grids (2x2, 4x4, 8x8) while handling odd-dimension remainder pixels gracefully.
+- Unified Pipeline: Single-command end-to-end execution from raw image or dataset to reconstructed output.
+- Automated Grid Tiling: Slices arbitrary images into regular grids (2x2, 4x4, 8x8) while handling odd-dimension remainder pixels gracefully.
 - Edge-Preserving Preprocessing: Implements adaptive bilateral filtering, guided contour smoothing, and unsharp masking to enhance texture gradients without introducing border artifacts.
 - 6-Channel Border Descriptors: Boundary feature tensors combining LAB color channels, Sobel gradient magnitude, Sobel gradient phase, and Laplacian curvature.
 - Non-Linear Minkowski Distance Metric: Robust Lp (p=0.3, q=1/16) metric resistant to outliers and illumination variations.
 - Best-Buddies Reassembly: Mutual best-match pairing graph formulation with constrained greedy placement, connected component segmentation, and 2-opt shift local search.
 - Interactive Visual Inspector: Tkinter GUI for before/after comparison, live reloading, jump-to navigation, and asynchronous re-solving.
-- Unified and Modular API: Single-command execution, individual component execution, or direct in-memory Python package imports.
 
 ---
 
 ## Architecture and Technical Approach
 
-`
+```
 +-------------------------------------------------------------+
 |                        Source Image                         |
 +------------------------------+------------------------------+
@@ -44,7 +44,7 @@ The system slices high-resolution source images into uniform grid tiles (2x2, 4x
 |                     1. Tiling & Enhancement                 |
 |   - Deterministic spatial grid cutting (2x2, 4x4, 8x8)      |
 |   - Adaptive bilateral denoising + guided filtering         |
-|   - High-frequency unsharp masking & metadata export        |
+|   - High-frequency unsharp masking & metadata tracking      |
 +------------------------------+------------------------------+
                                |
                                v
@@ -69,7 +69,7 @@ The system slices high-resolution source images into uniform grid tiles (2x2, 4x
 |   - Seamless composite image reconstruction                 |
 |   - Interactive visual inspection & live verification       |
 +-------------------------------------------------------------+
-`
+```
 
 ### Feature Formulation and Distance Function
 
@@ -83,7 +83,7 @@ Default parameters: p = 0.3, q = 1/16, w_color = 0.4, w_mag = 0.2, w_dir = 0.2, 
 
 ## Repository Layout
 
-`
+```
 gravity-falls-puzzle-solver/
 |-- .gitignore                  # Git ignore definitions
 |-- LICENSE                     # MIT License
@@ -91,10 +91,7 @@ gravity-falls-puzzle-solver/
 |-- requirements.txt            # Python dependencies
 |-- README.md                   # Project documentation
 |-- main.py                     # Unified root CLI entrypoint
-|-- run_all.py                  # Convenience root runner for pipeline and GUI
-|-- run_phase1.py               # Tile extraction runner
-|-- run_phase2.py               # Puzzle reassembly runner
-|-- puzzle_gui_enhanced.py      # GUI visualizer runner
+|-- gui.py                      # Direct visual inspector launcher
 |
 |-- puzzle_solver/              # Core Python package
 |   |-- __init__.py             # Public exports and versioning
@@ -106,10 +103,10 @@ gravity-falls-puzzle-solver/
 |   |   |-- tiling.py           # Grid detection, enhancement, and tile slicing
 |   |   |-- features.py         # Multi-channel feature extraction and distances
 |   |   |-- solver.py           # Best-Buddies placement and solver logic
-|   |   -- assembly.py         # Canvas stitching and composite generation
-|   -- ui/
+|   |   `-- assembly.py         # Canvas stitching and composite generation
+|   `-- ui/
 |       |-- __init__.py
-|       -- viewer.py           # Tkinter visual inspector GUI
+|       `-- viewer.py           # Tkinter visual inspector GUI
 |
 |-- tests/                      # Automated unit and integration test suite
 |   |-- __init__.py
@@ -117,13 +114,16 @@ gravity-falls-puzzle-solver/
 |   |-- test_features.py        # Unit tests for feature extraction and metrics
 |   |-- test_solver.py          # Unit tests for Best-Buddies and brute-force solvers
 |   |-- test_assembly.py        # Unit tests for image assembly
-|   -- test_integration.py     # End-to-end pipeline integration tests
+|   `-- test_integration.py     # End-to-end pipeline integration tests
 |
--- assets/                     # Demonstration assets
+|-- scripts/
+|   `-- run_tests.py            # Test execution runner
+|
+`-- assets/                     # Demonstration assets
     |-- 2x2 Demo.png
     |-- 4x4 Demo.png
-    -- 8x8 Demo.png
-`
+    `-- 8x8 Demo.png
+```
 
 ---
 
@@ -136,24 +136,24 @@ gravity-falls-puzzle-solver/
 ### Environment Setup
 
 1. Clone the repository:
-   `ash
+   ```bash
    git clone https://github.com/Abosmra/gravity-falls-puzzle-solver.git
    cd gravity-falls-puzzle-solver
-   `
+   ```
 
 2. Create and activate a virtual environment:
-   `ash
+   ```bash
    python -m venv .venv
    # Windows (PowerShell)
    .\.venv\Scripts\Activate.ps1
    # Linux / macOS
    source .venv/bin/activate
-   `
+   ```
 
 3. Install dependencies:
-   `ash
+   ```bash
    pip install -r requirements.txt
-   `
+   ```
 
 ---
 
@@ -163,19 +163,19 @@ The benchmarking dataset is hosted on Kaggle:
 [Jigsaw Puzzle Dataset on Kaggle](https://www.kaggle.com/datasets/serhiibiruk/jigsaw-puzzle)
 
 ### Directory Configuration
-Extract the downloaded dataset into the dataset_images/ folder at the root of the project:
-`
+Extract the downloaded dataset into the `dataset_images/` folder at the root of the project:
+```
 dataset_images/
 |-- puzzle_2x2/
 |   |-- 0.jpg
-|   -- ...
+|   `-- ...
 |-- puzzle_4x4/
 |   |-- 0.jpg
-|   -- ...
--- puzzle_8x8/
+|   `-- ...
+`-- puzzle_8x8/
     |-- 0.jpg
-    -- ...
-`
+    `-- ...
+```
 
 ---
 
@@ -184,43 +184,38 @@ dataset_images/
 ### 1. Unified CLI (main.py)
 
 #### Run Full Pipeline with Visual Inspector
-`ash
+```bash
 python main.py all
-`
+# or simply
+python main.py
+```
 
 #### Solve a Single Image End-to-End
-`ash
+```bash
 python main.py solve --image path/to/sample.jpg --grid 4x4 --out solved_sample.png
-`
+```
 
 #### Batch Solve Entire Dataset
-`ash
-python main.py solve --dataset dataset_images --out phase2_outputs --time-limit 60.0
-`
+```bash
+python main.py solve --dataset dataset_images --out output --time-limit 60.0
+```
 
 #### Tile Extraction Only
-`ash
-python main.py phase1 --dataset dataset_images --out phase1_outputs
-`
+```bash
+python main.py extract --dataset dataset_images --out output/tiles
+```
 
 #### Reassembly Only
-`ash
-python main.py phase2 --phase1-dir phase1_outputs --out phase2_outputs --group puzzle_4x4
-`
+```bash
+python main.py reassemble --tiles-dir output/tiles --out output/solved --group puzzle_4x4
+```
 
 #### Launch Visual Inspector GUI
-`ash
+```bash
 python main.py gui
-`
-
----
-
-### 2. Standalone Root Runners (Backward Compatible)
-
-- python run_all.py - Runs background processing and opens GUI viewer.
-- python run_phase1.py - Runs tile extraction with multiprocessing.
-- python run_phase2.py --group puzzle_2x2 --image 0 - Solves selected puzzle.
-- python puzzle_gui_enhanced.py - Directly opens the visual inspector.
+# or directly
+python gui.py
+```
 
 ---
 
@@ -228,7 +223,7 @@ python main.py gui
 
 The interactive Tkinter GUI provides real-time verification of puzzle reconstructions:
 
-- Dual-Pane View: Displays the scrambled input or original tiles on the left and the reconstructed solution on the right.
+- Dual-Pane View: Displays the original/scrambled image on the left and the reconstructed solution on the right.
 - Live Auto-Reload: Images update automatically in real-time as background solving processes finish.
 - Direct Navigation: Jump to any specific puzzle using the grid selector and image ID input.
 - Manual Re-solving: Use the 'Resolve (Redo)' button to clear previous results and run solver passes with alternative seeds.
@@ -239,30 +234,20 @@ The interactive Tkinter GUI provides real-time verification of puzzle reconstruc
 
 The repository contains a test suite covering unit behavior and end-to-end integration:
 
-Run all tests via standard library unittest:
-`ash
+Run all tests:
+```bash
+python scripts/run_tests.py
+# or
 python -m unittest discover tests -v
-`
-
-Run tests using pytest (if installed):
-`ash
-pytest tests/ -v
-`
-
-### Test Suite Coverage
-- test_tiling.py: Grid dimension detection, remainder pixel distribution, enhancement stability, metadata validation.
-- test_features.py: 6-channel border tensor generation, strip normalization, distance computation, compatibility matrix sizing.
-- test_solver.py: Opposite side mappings, mutual Best-Buddies validation, exact 2x2 brute-force verification, solver configuration.
-- test_assembly.py: Coordinate mapping, tile scaling, canvas stitching.
-- test_integration.py: End-to-end synthetic image cutting, solving, and assembly without external filesystem mutations.
+```
 
 ---
 
-## Output Artifacts
+## Output Structure
 
-- phase1_outputs/<group>/<image_id>/tiles/: Extracted PNG tiles named tile_RR_CC.png.
-- phase1_outputs/<group>/<image_id>/metadata.json: Grid metadata containing source path, dimensions, and tile lists.
-- phase2_outputs/<group>/<image_id>.png: Solved and stitched composite images.
+- `output/tiles/<group>/<image_id>/tiles/`: Extracted PNG tiles named `tile_RR_CC.png`.
+- `output/tiles/<group>/<image_id>/metadata.json`: Grid metadata containing source path, dimensions, and tile lists.
+- `output/solved/<group>/<image_id>.png`: Solved and stitched composite images.
 
 ---
 
