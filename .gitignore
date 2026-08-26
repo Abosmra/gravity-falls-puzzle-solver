@@ -20,6 +20,11 @@ build/
 
 # Data and generated artifacts
 dataset_images/
+dataset/
+data/
 phase1_outputs/
 phase2_outputs/
-
+*.zip
+*.tar.gz
+*.rar
+*.7z

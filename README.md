@@ -5,7 +5,7 @@ Two-phase pipeline to cut Gravity Falls images into grid tiles (Phase 1) and rea
 ## Table of Contents
 1. [Quick Start](#quick-start)
 2. [Setup](#setup)
-3. [Data Layout](#data-layout)
+3. [Dataset & Data Layout](#dataset--data-layout)
 4. [Architecture Overview](#architecture-overview)
 5. [Phase 1: Preprocessing & Tile Cutting](#phase-1-preprocessing--tile-cutting)
 6. [Phase 2: Puzzle Solving](#phase-2-puzzle-solving)
@@ -37,9 +37,19 @@ python -m venv .venv
 & .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python run_all.py
+```
 
+## Dataset & Data Layout
 
-## Data Layout
+### Dataset Download
+The dataset used for this project is available on Kaggle:
+👉 **[Jigsaw Puzzle Dataset on Kaggle](https://www.kaggle.com/datasets/serhiibiruk/jigsaw-puzzle)**
+
+To set up the dataset:
+1. Download the dataset from the Kaggle link above.
+2. Extract/place the images inside the `dataset_images/` folder at the root of the project.
+
+### Directory Structure
 - Input images live under `dataset_images/`, grouped by folders that include `2x2`, `4x4`, or `8x8` in their name (e.g., `puzzle_4x4/0/*.png`).
 - Phase 1 outputs land in `phase1_outputs/<group>/<image_id>/tiles/` with `metadata.json`.
 - Phase 2 writes assembled puzzles to `phase2_outputs/<group>/<image_id>.png`.
