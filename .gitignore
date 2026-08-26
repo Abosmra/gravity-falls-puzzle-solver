@@ -1,0 +1,25 @@
+phase1/__pycache__/
+phase2/__pycache__/
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.Python
+.venv/
+venv/
+.env
+.env.local
+.pytest_cache/
+.coverage
+dist/
+build/
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Data and generated artifacts
+dataset_images/
+phase1_outputs/
+phase2_outputs/
+
