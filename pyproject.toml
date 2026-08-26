@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gravity-falls-puzzle-solver"
+version = "1.0.0"
+description = "Two-phase computer vision pipeline for image grid tile cutting and feature-based puzzle reassembly"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Mohamed" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Processing"
+]
+dependencies = [
+    "opencv-contrib-python>=4.5.0",
+    "numpy>=1.20.0",
+    "Pillow>=9.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0"
+]
+
+[project.scripts]
+gravity-falls-solver = "puzzle_solver.__main__:main"
+puzzle-solver = "puzzle_solver.__main__:main"

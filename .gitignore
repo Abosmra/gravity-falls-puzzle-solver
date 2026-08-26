@@ -1,24 +1,37 @@
-phase1/__pycache__/
-phase2/__pycache__/
+# Python bytecode & caches
 __pycache__/
 *.py[cod]
+*.class
+*.so
 *.pyo
-*.egg-info/
-.Python
+
+# Virtual Environments
 .venv/
 venv/
+env/
+ENV/
 .env
 .env.local
+
+# Packaging & Builds
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Testing & Coverage
 .pytest_cache/
 .coverage
-dist/
-build/
+htmlcov/
+
+# Logs & OS metadata
 *.log
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
 
-# Data and generated artifacts
+# Datasets and Generated Outputs
 dataset_images/
 dataset/
 data/

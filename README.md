@@ -1,458 +1,276 @@
 # Gravity Falls Puzzle Solver
 
-Two-phase pipeline to cut Gravity Falls images into grid tiles (Phase 1) and reassemble them with a mask-free, border-based best-buddies solver (Phase 2). Includes an interactive GUI for viewing before/after results.
+An autonomous Computer Vision system for square jigsaw and tiled image puzzle reassembly using multi-cue border feature matching and the Best-Buddies placement algorithm.
+
+The system slices high-resolution source images into uniform grid tiles (2x2, 4x4, 8x8), applies edge-preserving enhancement, extracts multi-channel boundary features, computes compatibility metrics, reconstructs the original image layout, and provides an interactive visual inspector GUI.
+
+---
 
 ## Table of Contents
-1. [Quick Start](#quick-start)
-2. [Setup](#setup)
-3. [Dataset & Data Layout](#dataset--data-layout)
-4. [Architecture Overview](#architecture-overview)
-5. [Phase 1: Preprocessing & Tile Cutting](#phase-1-preprocessing--tile-cutting)
-6. [Phase 2: Puzzle Solving](#phase-2-puzzle-solving)
-7. [GUI: Interactive Viewer](#gui-interactive-viewer)
-8. [Design Justifications](#design-justifications)
-9. [References](#references)
-10. [Troubleshooting](#troubleshooting)
-
-## Quick Start
-
-**One command to do everything:**
-```bash
-python run_all.py
-```
-
-This will:
-- ✓ Check if Phase 1 has been run (runs it if not)
-- ✓ Check if Phase 2 has been run (runs it if not)
-- ✓ Launch interactive GUI while processing continues in background
-- ✓ Puzzles automatically ordered: image 0 (2x2, 4x4, 8x8), image 1 (2x2, 4x4, 8x8), etc.
-- ✓ Shows "Loading..." for images being processed
-- ✓ Click Next/Previous to browse while data is being generated
-
-
-### Setup and run (Bash)
-
-```bash
-python -m venv .venv
-& .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python run_all.py
-```
-
-## Dataset & Data Layout
-
-### Dataset Download
-The dataset used for this project is available on Kaggle:
-👉 **[Jigsaw Puzzle Dataset on Kaggle](https://www.kaggle.com/datasets/serhiibiruk/jigsaw-puzzle)**
-
-To set up the dataset:
-1. Download the dataset from the Kaggle link above.
-2. Extract/place the images inside the `dataset_images/` folder at the root of the project.
-
-### Directory Structure
-- Input images live under `dataset_images/`, grouped by folders that include `2x2`, `4x4`, or `8x8` in their name (e.g., `puzzle_4x4/0/*.png`).
-- Phase 1 outputs land in `phase1_outputs/<group>/<image_id>/tiles/` with `metadata.json`.
-- Phase 2 writes assembled puzzles to `phase2_outputs/<group>/<image_id>.png`.
+1. [Key Capabilities](#key-capabilities)
+2. [Architecture and Technical Approach](#architecture-and-technical-approach)
+3. [Repository Layout](#repository-layout)
+4. [Installation and Setup](#installation-and-setup)
+5. [Dataset Setup](#dataset-setup)
+6. [CLI and Execution Guide](#cli-and-execution-guide)
+7. [Visual Inspector GUI](#visual-inspector-gui)
+8. [Automated Testing](#automated-testing)
+9. [Output Artifacts](#output-artifacts)
+10. [License and References](#license-and-references)
 
 ---
 
-## Architecture Overview
+## Key Capabilities
 
-The pipeline consists of two distinct phases:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     INPUT DATASET                        │
-│         (Unscrambled source images in grid folders)      │
-└──────────────────┬──────────────────────────────────────┘
-                   │
-                   ▼
-    ┌──────────────────────────────┐
-    │      PHASE 1: CUTTING        │
-    │  • Grid detection            │
-    │  • Deterministic tiling      │
-    │  • Edge-preserving enhance   │
-    └──────────────────┬───────────┘
-                       │
-                       ▼
-        ┌──────────────────────────────┐
-        │  PHASE 1 OUTPUTS             │
-        │  • tiles/tile_r_c.png        │
-        │  • metadata.json             │
-        └──────────────────┬───────────┘
-                           │
-                           ▼
-            ┌──────────────────────────────┐
-            │   PHASE 2: SOLVING           │
-            │  • Border feature extraction │
-            │  • Best-buddies matching     │
-            │  • Beam-search placement     │
-            └──────────────────┬───────────┘
-                               │
-                               ▼
-                ┌──────────────────────────────┐
-                │  PHASE 2 OUTPUTS             │
-                │  • {image_id}.png (solved)   │
-                └──────────────────┬───────────┘
-                                   │
-                                   ▼
-                    ┌──────────────────────────────┐
-                    │     GUI VIEWER               │
-                    │  • Before/After display      │
-                    │  • Interactive navigation    │
-                    └──────────────────────────────┘
-```
+- Automated Grid Tiling: Slices arbitrary images into exact regular grids (2x2, 4x4, 8x8) while handling odd-dimension remainder pixels gracefully.
+- Edge-Preserving Preprocessing: Implements adaptive bilateral filtering, guided contour smoothing, and unsharp masking to enhance texture gradients without introducing border artifacts.
+- 6-Channel Border Descriptors: Boundary feature tensors combining LAB color channels, Sobel gradient magnitude, Sobel gradient phase, and Laplacian curvature.
+- Non-Linear Minkowski Distance Metric: Robust Lp (p=0.3, q=1/16) metric resistant to outliers and illumination variations.
+- Best-Buddies Reassembly: Mutual best-match pairing graph formulation with constrained greedy placement, connected component segmentation, and 2-opt shift local search.
+- Interactive Visual Inspector: Tkinter GUI for before/after comparison, live reloading, jump-to navigation, and asynchronous re-solving.
+- Unified and Modular API: Single-command execution, individual component execution, or direct in-memory Python package imports.
 
 ---
 
-## Phase 1: Preprocessing & Tile Cutting
+## Architecture and Technical Approach
 
-### Purpose
-Transform raw puzzle images into standardized, enhanced tiles that preserve edge information for accurate matching.
+`
++-------------------------------------------------------------+
+|                        Source Image                         |
++------------------------------+------------------------------+
+                               |
+                               v
++-------------------------------------------------------------+
+|                     1. Tiling & Enhancement                 |
+|   - Deterministic spatial grid cutting (2x2, 4x4, 8x8)      |
+|   - Adaptive bilateral denoising + guided filtering         |
+|   - High-frequency unsharp masking & metadata export        |
++------------------------------+------------------------------+
+                               |
+                               v
++-------------------------------------------------------------+
+|                2. Boundary Feature Extraction               |
+|   - 6-channel boundary tensors (LAB, Sobel Mag/Dir, Lap)    |
+|   - 2D zero-mean unit-variance strip normalization          |
+|   - Pairwise non-linear distance matrix computation         |
++------------------------------+------------------------------+
+                               |
+                               v
++-------------------------------------------------------------+
+|                  3. Best-Buddies Reassembly                 |
+|   - Exact branch-and-bound search (2x2)                     |
+|   - Mutual best-match pairing & constrained placement (NxN) |
+|   - Connected component segmentation & 2-opt shift passes   |
++------------------------------+------------------------------+
+                               |
+                               v
++-------------------------------------------------------------+
+|                4. Canvas Stitching & Rendering              |
+|   - Seamless composite image reconstruction                 |
+|   - Interactive visual inspection & live verification       |
++-------------------------------------------------------------+
+`
 
-### Process Flow
+### Feature Formulation and Distance Function
 
-#### 1. **Grid Detection**
-```python
-def detect_grid_from_folder(folder_name: str):
-    # Detects grid size (2x2, 4x4, 8x8) from folder name
-    # E.g., "puzzle_4x4" → (4, 4)
-```
+For two candidate borders A and B across corresponding orientations, the distance function is evaluated as:
 
-**Justification**: Using folder naming convention for grid specification is deterministic, eliminates need for automatic grid detection (which is ambiguous), and provides user control.
+D(A, B) = [ w_color * sum(|A_lab - B_lab|^p) + w_mag * sum(|A_mag - B_mag|^p) + w_dir * sum(|A_dir - B_dir|^p) + w_lap * sum(|A_lap - B_lap|^p) ]^(q/p)
 
-#### 2. **Deterministic Grid Cutting**
-Input image → uniformly divided into exact grid cells with no overlapping or gaps.
-
-**Formula:**
-```
-tile_height = image_height / num_rows
-tile_width = image_width / num_cols
-tile[r,c] = image[r*H : (r+1)*H, c*W : (c+1)*W]
-```
-
-**Justification**: 
-- Deterministic approach ensures reproducibility
-- No contour detection avoids misalignment issues
-- Uniform tiles preserve edge alignment for matching
-
-#### 3. **Edge-Preserving Enhancement Pipeline**
-Applied to each tile to enhance matching features while preserving borders:
-
-```
-Input Image
-    ↓
-[1] Bilateral Denoising
-    └─ Preserves edges while smoothing textures
-    └─ cv2.bilateralFilter(d=9, sigmaColor=40, sigmaSpace=40)
-    ↓
-[2] Guided Filtering (or Bilateral Fallback)
-    └─ Smooth without blur while preserving edges
-    └─ Uses tile itself as guide
-    └─ radius=8, eps=1e-2
-    ↓
-[3] Soft Unsharp Masking
-    └─ Crisp edges without halos
-    └─ addWeighted(img, 1.12, blur, -0.12)
-    ↓
-[4] Frequency Fusion
-    └─ Blend original (55%) + enhanced (45%)
-    └─ Retains detail while keeping enhancement subtle
-    ↓
-Output: Enhanced Tile
-```
-
-**Justification**:
-- **Bilateral denoising**: Classic edge-preserving technique from computer vision (Tomasi & Manduchi, 1998)
-- **Guided filter**: Advanced edge-preserving smoothing (He et al., 2010) better than Gaussian blur
-- **Unsharp masking**: Standard technique to enhance local contrast
-- **Frequency fusion**: Prevents over-enhancement by blending with original; avoids artificial artifacts that fool edge matchers
-- **Adaptive parameters**: Scales with tile size to remain effective across 2x2, 4x4, and 8x8 grids
-
-#### 4. **Metadata Generation**
-```json
-{
-  "grid": [4, 4],
-  "tile_height": 256,
-  "tile_width": 256,
-  "tile_filenames": ["tile_0_0.png", "tile_0_1.png", ...]
-}
-```
-
-**Justification**: Metadata allows Phase 2 to load tiles in deterministic order, independent of filesystem ordering.
-
-### Output Format
-```
-phase1_outputs/
-├── puzzle_2x2/
-│   ├── 0/
-│   │   ├── tiles/
-│   │   │   ├── tile_0_0.png
-│   │   │   ├── tile_0_1.png
-│   │   │   ├── tile_1_0.png
-│   │   │   └── tile_1_1.png
-│   │   └── metadata.json
-│   ├── 1/
-│   └── ...
-├── puzzle_4x4/
-└── puzzle_8x8/
-```
+Default parameters: p = 0.3, q = 1/16, w_color = 0.4, w_mag = 0.2, w_dir = 0.2, w_lap = 0.4.
 
 ---
 
-## Phase 2: Puzzle Solving
+## Repository Layout
 
-### Purpose
-Reconstruct the original image by analyzing tile borders and finding correct placements using best-buddies matching algorithm.
-
-### Technique: Border-Based Best-Buddies Solver
-
-#### 1. **Mask-Free Border Feature Extraction**
-Unlike traditional puzzle solvers that use contour segmentation masks, this approach directly analyzes pixel borders:
-
-**For each tile, extract 4 directional border patches (0=top, 1=right, 2=bottom, 3=left):**
-```
-       Border 0 (Top)
-    ┌──────────────────┐
-    │░░░░░░░░░░░░░░░░░│  strip_width = 1 pixel
-    │                  │
-  B3│     TILE         │B1 (Right)
-    │                  │
-    │░░░░░░░░░░░░░░░░░│
-    └──────────────────┘
-       Border 2 (Bottom)
-```
-
-**Feature vector for each border includes:**
-1. **LAB Color** (3 channels): Separates luminance (L) from color (A, B)
-2. **Gradient Magnitude** (1 channel): Edge strength via Sobel operators
-3. **Gradient Direction** (1 channel): Edge orientation
-4. **Laplacian** (1 channel): Second-derivative edge detector
-
-```python
-feature_vector = [L, A, B, |∇|, θ(∇), ∇²]
-```
-
-**Justification**:
-- **LAB color**: Perceptually uniform color space; L channel matches human brightness perception
-- **Gradient**: Captures edge sharpness and orientation at tile borders
-- **Laplacian**: Detects fine texture and edge transitions
-- **Multiple scales**: Combines different edge representations for robustness
-- **No contours**: Avoids segmentation artifacts; works directly on pixels
-
-#### 2. **Compatibility Matrix Computation**
-Build 4 matrices (one per direction) measuring how well adjacent tiles match:
-
-```
-For side 0 (top), tile i's top border should match tile j's bottom:
-    compat[0][i, j] = distance(border_i[top], border_j[bottom])
-
-Formula with weighted distances:
-    D(A, B) = [Σ|A-B|^p]^(q/p)
-    
-    Where:
-    - p = 0.3 (sub-linear norm)
-    - q = 1/16 (compression factor)
-    - Weighted combination:
-        0.4 × color_distance
-      + 0.2 × gradient_magnitude_distance
-      + 0.2 × gradient_direction_distance
-      + 0.4 × laplacian_distance
-```
-
-**Justification**:
-- **Sublinear norm (p=0.3)**: Makes outliers less influential; fewer false positives
-- **Weighted channels**: Laplacian and color weighted equally (0.4) as primary cues; gradient magnitude/direction (0.2) as secondary
-- **4 directional matrices**: Separates constraint spaces for directional matching
-
-#### 3. **Best-Buddies Matching**
-Find strongly reciprocal matches:
-
-```
-Tile A's best match in direction 0 (top) = Tile B
-Tile B's best match in direction 2 (bottom) = Tile A
-→ Strong confidence that A and B are adjacent
-```
-
-**Algorithm:**
-1. For each tile and direction, find top-K candidates (candidates below distance threshold)
-2. Check bidirectional agreement: A→B in direction 0 AND B→A in direction 2
-3. Build confident edges in the placement graph
-
-**Justification**:
-- **Bidirectional agreement**: Dramatically reduces false matches vs single-direction voting
-- **Beam search**: Explores multiple promising partial solutions instead of greedy left-to-right
-- **Dynamic seeding**: Starts with most confident placements, allowing less confident corners to be resolved later
-
-#### 4. **Beam-Search Placement with Dynamic Seeding**
-Build the solution incrementally using beam search:
-
-```
-Initialization:
-  For each possible start tile:
-    Place at (0,0)
-    Propagate constraints via best-buddies graph
-    →State = [partial placement, cost, unplaced tiles]
-
-Iteration:
-  For each state in beam (top K by cost):
-    Try placing each remaining tile at empty position
-    If best-buddies confirm it:
-      Add to new beam
-  Prune to top K states by cost
-
-Termination:
-  When all tiles placed or beam exhausted
-  → Return best state found
-```
-
-**Dynamic Seeding Benefits:**
-- Doesn't assume (0,0) is known
-- Explores multiple root placements in parallel
-- Adapts to missing edge matches
-
-**Justification**:
-- **Beam search**: Explores K promising paths vs greedy single path (more robust to local minima)
-- **Best-buddies prioritization**: Heavily weighted constraints reduce search space
-- **Cost function balances**:
-  - Strongly rewards best-buddy placements
-  - Penalizes mismatches
-  - Handles missing constraints gracefully
-
-#### 5. **Solution Assembly**
-Once placement found:
-```
-For each position (r,c):
-  Retrieve tile at grid[r,c]
-  Extract tile image from phase1_outputs
-  Place at canvas position (r*tile_h, c*tile_w)
-Save as phase2_outputs/{group}/{image_id}.png
-```
-
-### Output Format
-```
-phase2_outputs/
-├── puzzle_2x2/
-│   ├── 0.png
-│   ├── 1.png
-│   └── ...
-├── puzzle_4x4/
-└── puzzle_8x8/
-```
+`
+gravity-falls-puzzle-solver/
+|-- .gitignore                  # Git ignore definitions
+|-- LICENSE                     # MIT License
+|-- pyproject.toml              # Packaging and dependency specifications
+|-- requirements.txt            # Python dependencies
+|-- README.md                   # Project documentation
+|-- main.py                     # Unified root CLI entrypoint
+|-- run_all.py                  # Convenience root runner for pipeline and GUI
+|-- run_phase1.py               # Tile extraction runner
+|-- run_phase2.py               # Puzzle reassembly runner
+|-- puzzle_gui_enhanced.py      # GUI visualizer runner
+|
+|-- puzzle_solver/              # Core Python package
+|   |-- __init__.py             # Public exports and versioning
+|   |-- __main__.py             # CLI execution module
+|   |-- config.py               # Dataclasses and configuration schemas
+|   |-- pipeline.py             # Multiprocessing batch pipelines and direct solvers
+|   |-- core/
+|   |   |-- __init__.py
+|   |   |-- tiling.py           # Grid detection, enhancement, and tile slicing
+|   |   |-- features.py         # Multi-channel feature extraction and distances
+|   |   |-- solver.py           # Best-Buddies placement and solver logic
+|   |   -- assembly.py         # Canvas stitching and composite generation
+|   -- ui/
+|       |-- __init__.py
+|       -- viewer.py           # Tkinter visual inspector GUI
+|
+|-- tests/                      # Automated unit and integration test suite
+|   |-- __init__.py
+|   |-- test_tiling.py          # Unit tests for tiling and enhancement
+|   |-- test_features.py        # Unit tests for feature extraction and metrics
+|   |-- test_solver.py          # Unit tests for Best-Buddies and brute-force solvers
+|   |-- test_assembly.py        # Unit tests for image assembly
+|   -- test_integration.py     # End-to-end pipeline integration tests
+|
+-- assets/                     # Demonstration assets
+    |-- 2x2 Demo.png
+    |-- 4x4 Demo.png
+    -- 8x8 Demo.png
+`
 
 ---
 
-## GUI: Interactive Viewer
+## Installation and Setup
 
-### Features
-- **Left panel**: Original puzzle image from dataset (unscrambled reference)
-- **Right panel**: Solved puzzle image (output from Phase 2)
-- **Navigation**: Browse through puzzles while Phase 1/2 processing continues in background
-- **Smart ordering**: Puzzles grouped by image ID first, then grid size (compare same image across difficulties)
-- **Dynamic loading**: Shows "Loading..." for incomplete data; auto-updates when ready
-- **Refresh**: Force re-scan of available puzzles
+### Prerequisites
+- Python 3.8 or higher
+- Windows, macOS, or Linux
 
+### Environment Setup
 
-### Screenshots
-- 2x2 puzzle example: ![2x2 Demo](assets/2x2%20Demo.png)
-- 4x4 puzzle example: ![4x4 Demo](assets/4x4%20Demo.png)
-- 8x8 puzzle example: ![8x8 Demo](assets/8x8%20Demo.png)
+1. Clone the repository:
+   `ash
+   git clone https://github.com/Abosmra/gravity-falls-puzzle-solver.git
+   cd gravity-falls-puzzle-solver
+   `
 
-### Technical Stack
-- **tkinter**: GUI framework (built-in, cross-platform)
-- **PIL/Pillow**: Image display and resizing
-- **OpenCV (cv2)**: Image manipulation
-- **Threading**: Non-blocking background processes
-- **Subprocess**: Launch Phase 1/2 without blocking GUI
+2. Create and activate a virtual environment:
+   `ash
+   python -m venv .venv
+   # Windows (PowerShell)
+   .\.venv\Scripts\Activate.ps1
+   # Linux / macOS
+   source .venv/bin/activate
+   `
 
----
-
-## Design Justifications
-
-### Why No Contour Segmentation?
-**Traditional approaches** (e.g., Jigsaw solvers using contour masks):
-- Require precise contour detection
-- Fail on worn edges, curved jigsaw pieces, or puzzle-like images
-- Add computational overhead
-
-**This approach** (border pixels directly):
-- Works on any image grid (photos, art, documents)
-- Robust to worn or curved edges
-- Simpler implementation
-
-### Why Best-Buddies Matching?
-**Alternatives:**
-1. **Greedy left-to-right**: Fast but error-prone; early mistakes cascade
-2. **Hungarian algorithm**: Optimal but O(n³) complexity; too slow for 64+ tiles
-3. **Genetic algorithms**: Slow convergence
-
-**Best-buddies + beam search:**
-- Exploits strong reciprocal constraints (A↔B must match)
-- Beam search explores K promising paths (more robust than greedy)
-- Near-linear complexity for well-constrained puzzles
-- Scales well to 64-tile puzzles (8x8 grid)
-
-### Why LAB Color Space?
-- **Separates luminance from color**: Gradient detection more robust
-- **Perceptually uniform**: Color differences match human perception
-- **Standard in image processing**: Used in SIFT, SURF, and modern CNN backbones
-
-### Why Adaptive Enhancement Parameters?
-Large tiles (4x4, 8x8) have different texture scales than small tiles (2x2):
-- Bilateral filter radius scales with tile size
-- Guided filter radius matches tile structure
-→ Same code works well across 2x2, 4x4, 8x8 without per-size tuning
-
-### Why Beam Search Breadth?
-Default: **K=5** candidate states per iteration
-- Explores 5 promising partial solutions in parallel
-- Balances exploration vs computation time
-- For most 4x4/8x8 puzzles: finds solution in first 1-2 iterations
-- Fallback to lower K if time limit exceeded
-
-### Why Frequency Fusion (0.55 orig + 0.45 enhanced)?
-- Pure enhanced image: Over-processed; artificial edges fool matcher
-- Pure original image: Blurry; loses edge detail
-- 55/45 blend: Retains original texture while boosting real edges
-→ Best-buddies matcher gets natural, convincing borders
+3. Install dependencies:
+   `ash
+   pip install -r requirements.txt
+   `
 
 ---
 
-## References
+## Dataset Setup
 
-### Academic Papers
-1. **Best-Buddies Similarity** - Freeman & Garland (2002) "Image Quilting for Texture Synthesis and Transfer"
-   - Foundational bidirectional matching concept
-   
-2. **LAB Color Space** - CIE 1976 Color Space
-   - Perceptually uniform opponent color model
-   
-3. **Bilateral Filtering** - Tomasi & Manduchi (1998) "Bilateral Filtering for Gray and Color Images"
-   - Edge-preserving denoising technique
-   
-4. **Guided Filter** - He, Sun, Tang (2010) "Guided Image Filtering"
-   - Advanced edge-preserving smoothing
+The benchmarking dataset is hosted on Kaggle:
+[Jigsaw Puzzle Dataset on Kaggle](https://www.kaggle.com/datasets/serhiibiruk/jigsaw-puzzle)
 
-### Standard Computer Vision Techniques
-- **Sobel/Laplacian operators**: Gradient detection (standard edge detection)
-- **Gaussian blur**: Low-pass filtering
-- **Unsharp masking**: Local contrast enhancement
-- **Image resizing (bilinear interpolation)**: cv2.INTER_LINEAR
-
-### Algorithms
-- **Beam search**: Classic search algorithm used in NLP, planning
-- **Compatibility matrices**: CSP (Constraint Satisfaction Problem) concept
-- **Greedy/approximate matching**: Practical alternative to exhaustive search
+### Directory Configuration
+Extract the downloaded dataset into the dataset_images/ folder at the root of the project:
+`
+dataset_images/
+|-- puzzle_2x2/
+|   |-- 0.jpg
+|   -- ...
+|-- puzzle_4x4/
+|   |-- 0.jpg
+|   -- ...
+-- puzzle_8x8/
+    |-- 0.jpg
+    -- ...
+`
 
 ---
 
-## Troubleshooting
-- "No puzzles found": ensure `dataset_images/` is populated and folders contain `2x2`, `4x4`, or `8x8` in their names. Phase 2 will attempt to generate missing Phase 1 outputs automatically.
-- "Cannot read image": verify image paths and permissions under `dataset_images/`.
-- **GUI not launching**: Ensure tkinter is installed (built-in on Windows/Mac; on Linux run `sudo apt-get install python3-tk`).
-- **Puzzle solving varies**: Due to random seed initialization in beam search, results may differ slightly between runs. Re-running the solver on the same puzzle may yield different (but equally valid) solutions.
+## CLI and Execution Guide
 
-## Testing
-```bash
-pytest -q
-```
+### 1. Unified CLI (main.py)
+
+#### Run Full Pipeline with Visual Inspector
+`ash
+python main.py all
+`
+
+#### Solve a Single Image End-to-End
+`ash
+python main.py solve --image path/to/sample.jpg --grid 4x4 --out solved_sample.png
+`
+
+#### Batch Solve Entire Dataset
+`ash
+python main.py solve --dataset dataset_images --out phase2_outputs --time-limit 60.0
+`
+
+#### Tile Extraction Only
+`ash
+python main.py phase1 --dataset dataset_images --out phase1_outputs
+`
+
+#### Reassembly Only
+`ash
+python main.py phase2 --phase1-dir phase1_outputs --out phase2_outputs --group puzzle_4x4
+`
+
+#### Launch Visual Inspector GUI
+`ash
+python main.py gui
+`
+
+---
+
+### 2. Standalone Root Runners (Backward Compatible)
+
+- python run_all.py - Runs background processing and opens GUI viewer.
+- python run_phase1.py - Runs tile extraction with multiprocessing.
+- python run_phase2.py --group puzzle_2x2 --image 0 - Solves selected puzzle.
+- python puzzle_gui_enhanced.py - Directly opens the visual inspector.
+
+---
+
+## Visual Inspector GUI
+
+The interactive Tkinter GUI provides real-time verification of puzzle reconstructions:
+
+- Dual-Pane View: Displays the scrambled input or original tiles on the left and the reconstructed solution on the right.
+- Live Auto-Reload: Images update automatically in real-time as background solving processes finish.
+- Direct Navigation: Jump to any specific puzzle using the grid selector and image ID input.
+- Manual Re-solving: Use the 'Resolve (Redo)' button to clear previous results and run solver passes with alternative seeds.
+
+---
+
+## Automated Testing
+
+The repository contains a test suite covering unit behavior and end-to-end integration:
+
+Run all tests via standard library unittest:
+`ash
+python -m unittest discover tests -v
+`
+
+Run tests using pytest (if installed):
+`ash
+pytest tests/ -v
+`
+
+### Test Suite Coverage
+- test_tiling.py: Grid dimension detection, remainder pixel distribution, enhancement stability, metadata validation.
+- test_features.py: 6-channel border tensor generation, strip normalization, distance computation, compatibility matrix sizing.
+- test_solver.py: Opposite side mappings, mutual Best-Buddies validation, exact 2x2 brute-force verification, solver configuration.
+- test_assembly.py: Coordinate mapping, tile scaling, canvas stitching.
+- test_integration.py: End-to-end synthetic image cutting, solving, and assembly without external filesystem mutations.
+
+---
+
+## Output Artifacts
+
+- phase1_outputs/<group>/<image_id>/tiles/: Extracted PNG tiles named tile_RR_CC.png.
+- phase1_outputs/<group>/<image_id>/metadata.json: Grid metadata containing source path, dimensions, and tile lists.
+- phase2_outputs/<group>/<image_id>.png: Solved and stitched composite images.
+
+---
+
+## License and References
+
+### License
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+### References
+- Gallagher, A. C. (2012). Jigsaw Puzzles with Pieces of Unknown Orientation. IEEE Conference on Computer Vision and Pattern Recognition (CVPR).
+- Pomeranz, D., Shemesh, M., & Ben-Shahar, O. (2011). A Fully Automated Greedy Square Jigsaw Puzzle Solver. IEEE CVPR.
